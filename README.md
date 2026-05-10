@@ -83,6 +83,15 @@ com.yourname.mealplanner
 - **Physical Device Testing:** Testing on a physical device like the **Pixel 9 Pro XL** is highly recommended to accurately gauge real-world performance, scrolling smoothness with Jetpack Compose, and touch interactions.
 - **Gemini API Key:** You will need to generate an API key from Google AI Studio and store it securely in your `local.properties` file.
 
+
+## ☁️ Cloud Infrastructure (Serverless)
+To minimize costs and secure API keys, the AI logic is offloaded to Google Cloud:
+
+- **Compute:** Google Cloud Run (Dockerized Kotlin/JVM service).
+- **Scaling:** Configured to `min-instances 0` to ensure charges only occur during active requests.
+- **Security:** Gemini API keys are managed via Secret Manager, not stored on the mobile device.
+- **Connectivity:** Android app communicates with the backend via HTTPS/REST[cite: 2].
+
 ## 🚀 Getting Started
 1. Clone this repository.
 2. Add your Gemini API key to `local.properties`: `GEMINI_API_KEY=your_key_here`
