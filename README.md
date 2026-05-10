@@ -1,100 +1,88 @@
-# 🍽️ Meal Planner App with AI Assistant
+# 🍽️ Scalable Meal Planner Web App (AI-Powered)
 
-A modern, native Android application for planning daily, weekly, and monthly meals. It features an integrated AI Assistant powered by the Gemini LLM to review daily meal plans, estimate caloric intake, and provide healthy suggestions.
+An enterprise-grade, highly scalable web application for planning meals. Built with a modern Angular frontend and a robust Spring Boot Java backend. It features an integrated AI Assistant powered by the Gemini LLM to review meal plans, estimate caloric intake, and provide healthy suggestions.
 
 ## 🚀 Tech Stack
-- **Language:** Kotlin
-- **UI Toolkit:** Jetpack Compose
-- **Local Storage:** Room Database (SQLite)
-- **Remote API / AI:** Google AI Client SDK for Android (Gemini API)
-- **Architecture:** MVVM (Model-View-ViewModel) + Repository Pattern
-- **Asynchronous Programming:** Kotlin Coroutines & Flow
+- **Frontend:** Angular (TypeScript)
+- **Backend:** Spring Boot (Java)
+- **Primary Database:** PostgreSQL (Relational SQL)
+- **Caching Layer:** Redis (In-memory data store for high concurrency)
+- **Remote API / AI:** Google AI Studio (Gemini REST API)
+- **Architecture:** Client-Server, RESTful API, Stateless Microservices
 
-## 🏗️ Architecture (High-Level Design)
-The application follows Google's recommended architecture for modern Android development. With the addition of the AI Assistant, the Data Layer now handles both local persistence and remote API calls.
+## 🏗️ Architecture (High-Level Design for High Concurrency)
+To support massive scale (up to millions of users), the application utilizes a stateless backend and heavy caching to reduce database load.
 
 **Data Flow:**
-`UI Layer (Jetpack Compose) ↔ ViewModel ↔ Repository ↔ [Local Data (Room) & Remote AI (Gemini)]`
+`Client (Angular) ↔ Load Balancer ↔ Spring Boot API (Stateless) ↔ [Redis Cache & PostgreSQL & Gemini API]`
 
-1. **UI Layer (View):** Displays data, captures user inputs, and shows AI feedback.
-2. **ViewModel:** Holds the UI state (including AI loading/error states) and processes user intents (e.g., clicking "Review My Plan").
-3. **Repository:** The single source of truth. It fetches saved meals from the local database, formats them into a prompt, and queries the Gemini API for a review.
+1. **Angular Frontend (Client):** A Single Page Application (SPA) served via a CDN. It manages local state, UI routing, and makes asynchronous HTTP requests to the backend.
+2. **Load Balancer:** Distributes incoming traffic across multiple Spring Boot instances to prevent any single server from being overwhelmed.
+3. **Spring Boot Backend (API):** - Completely stateless (session data is not stored on the server).
+    - Exposes RESTful endpoints (`/api/meals`, `/api/ai/review`).
+    - Handles business logic, authentication, and security.
 4. **Data Layer:**
-    - **Local Source:** Room SQLite database handling data persistence.
-    - **Remote Source:** Network client communicating with the Gemini LLM.
+    - **PostgreSQL:** The persistent, single source of truth for all user and meal data. Uses Connection Pooling (HikariCP) to manage database connections efficiently.
+    - **Redis:** Caches frequently requested data (like default meal types or recent user meal plans) so the database isn't hit for every single request.
+    - **Gemini API:** Remote LLM for nutritional analysis.
 
 ## 🤖 AI Assistant Integration Workflow
-1. The user adds their meals for the day (e.g., Breakfast, Lunch, Dinner).
-2. The user taps a "Review Plan with AI" button.
-3. The `PlannerViewModel` asks the `MealRepository` for an analysis.
-4. The `MealRepository` retrieves the day's `PlannedMeal` list from the `MealDao`.
-5. The repository constructs a prompt containing the meals and asks Gemini to estimate calories, check for limits, and suggest healthier alternatives if needed.
-6. The `GeminiApiService` executes the API call.
-7. The response is passed back up to the UI and displayed in an `AIReviewCard`.
+1. The user inputs their daily meals via the Angular UI.
+2. The user clicks "Review Plan with AI".
+3. Angular sends a POST request to the Spring Boot endpoint (`/api/ai/review`).
+4. Spring Boot intercepts the request, verifies the user, and constructs a precise text prompt containing the meal data.
+5. Spring Boot makes a synchronous, secure server-to-server HTTP call to the Gemini API.
+6. Spring Boot parses Gemini's response, formats it into a structured JSON DTO, and returns it to Angular.
+7. Angular renders the feedback in the UI.
 
-## 🗄️ Database Schema & Data Models (Low-Level Design)
+## 🗄️ Database Schema (Low-Level Design)
 
-### 1. Local Database Entities (Room)
-**`MealType` (Table)**
-- `id`: Int (Primary Key)
-- `name`: String (e.g., "Breakfast", "Lunch")
+### PostgreSQL Tables
+*(Note: In a web app, we must track users, unlike a single-device mobile app).*
 
-**`PlannedMeal` (Table)**
-- `id`: Int (Primary Key)
-- `date`: String (Format: "YYYY-MM-DD")
-- `mealTypeId`: Int (Foreign Key linking to `MealType`)
-- `foodDescription`: String (e.g., "Oatmeal and berries")
+**`users`**
+- `id`: UUID (Primary Key)
+- `email`: VARCHAR (Unique)
+- `password_hash`: VARCHAR
 
-### 2. Network Models (API)
-**`AIReviewResponse` (Data Class)**
-- `estimatedCalories`: Int
-- `isOverLimit`: Boolean
-- `suggestions`: List<String>
-- `feedbackText`: String
+**`meal_types`**
+- `id`: INT (Primary Key)
+- `name`: VARCHAR (e.g., "Breakfast", "Lunch")
 
-## 📁 Project Structure
+**`planned_meals`**
+- `id`: UUID (Primary Key)
+- `user_id`: UUID (Foreign Key -> users.id)
+- `date`: DATE
+- `meal_type_id`: INT (Foreign Key -> meal_types.id)
+- `food_description`: TEXT
+
+### Redis Cache Keys
+- `user_meals:{user_id}:{date}` -> JSON string of the day's meals (Expires in 24 hours).
+
+## 📁 Project Structure (Monorepo)
+```text
+meal-planner-web/
+│
+├── frontend/                     # Angular Application
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── components/       # MealCard, AiReviewCard
+│   │   │   ├── services/         # MealService, AiService (HTTP calls)
+│   │   │   └── models/           # TypeScript Interfaces
+│   │   └── environments/         # API URLs
+│
+└── backend/                      # Spring Boot Application
+    ├── src/main/java/com/mealplanner/
+    │   ├── controllers/          # REST Endpoints (MealController, AiController)
+    │   ├── services/             # Business Logic & Gemini API integration
+    │   ├── repositories/         # Spring Data JPA Interfaces
+    │   ├── models/               # JPA Entities (User, PlannedMeal)
+    │   └── config/               # Redis, Security, and CORS configurations
+    └── src/main/resources/
+        └── application.yml       # DB connection, API keys, Server settings
 ```
-com.yourname.mealplanner
-│
-├── data/                  # Data Layer
-│   ├── local/             # Local Database components
-│   │   ├── entities/      # MealType.kt, PlannedMeal.kt
-│   │   ├── dao/           # MealDao.kt
-│   │   └── AppDatabase.kt
-│   ├── network/           # Remote API components (NEW)
-│   │   ├── GeminiApiService.kt  # Handles Gemini API requests
-│   │   └── models/        # AIReviewResponse.kt
-│   └── repository/        # MealRepository.kt (Coordinates Room + Gemini)
-│
-├── ui/                    # UI Layer
-│   ├── viewmodel/         # PlannerViewModel.kt (Handles AI states)
-│   └── screens/           # Jetpack Compose UI
-│       ├── DailyPlannerScreen.kt
-│       └── components/    
-│           ├── MealCard.kt
-│           ├── AddMealDialog.kt
-│           └── AIReviewCard.kt  # Displays AI calorie warnings/suggestions (NEW)
-│
-└── MainActivity.kt        # Entry point
-```
 
-## 🛠️ Prerequisites & Testing
-- **IDE:** Android Studio (Latest stable version recommended).
-- **Physical Device Testing:** Testing on a physical device like the **Pixel 9 Pro XL** is highly recommended to accurately gauge real-world performance, scrolling smoothness with Jetpack Compose, and touch interactions.
-- **Gemini API Key:** You will need to generate an API key from Google AI Studio and store it securely in your `local.properties` file.
-
-
-## ☁️ Cloud Infrastructure (Serverless)
-To minimize costs and secure API keys, the AI logic is offloaded to Google Cloud:
-
-- **Compute:** Google Cloud Run (Dockerized Kotlin/JVM service).
-- **Scaling:** Configured to `min-instances 0` to ensure charges only occur during active requests.
-- **Security:** Gemini API keys are managed via Secret Manager, not stored on the mobile device.
-- **Connectivity:** Android app communicates with the backend via HTTPS/REST[cite: 2].
-
-## 🚀 Getting Started
-1. Clone this repository.
-2. Add your Gemini API key to `local.properties`: `GEMINI_API_KEY=your_key_here`
-3. Open the project in Android Studio.
-4. Sync Gradle files.
-5. Run the app on your connected Pixel device or emulator.
+## 🚀 Scaling Strategies Implemented
+- **Statelessness:** By using JWTs (JSON Web Tokens) for authentication, Spring Boot servers don't remember user sessions. We can spin up 100 servers, and any server can handle any request.
+- **Connection Pooling:** Prevents the database from crashing under the weight of thousands of simultaneous connections.
+- **Caching:** Redis intercepts requests for data that hasn't changed, delivering it in milliseconds and protecting PostgreSQL.
